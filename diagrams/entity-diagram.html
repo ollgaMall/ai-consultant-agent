@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<title>AI Opportunity and Implementation Consultant — Модель данных (ER)</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mermaid/10.6.1/mermaid.min.js"></script>
+<style>
+  html, body { margin:0; padding:0; height:100%; font-family:-apple-system,Segoe UI,Roboto,sans-serif; background:#f8fafc; }
+  #toolbar { position:fixed; top:0; left:0; right:0; z-index:10; background:#1e293b; color:white; padding:10px 16px; display:flex; align-items:center; gap:12px; box-shadow:0 2px 6px rgba(0,0,0,.2); }
+  #toolbar h1 { font-size:15px; margin:0; font-weight:600; flex:1; }
+  #toolbar button { background:#334155; color:white; border:none; padding:6px 12px; border-radius:6px; cursor:pointer; font-size:13px; }
+  #toolbar button:hover { background:#475569; }
+  #zoomLabel { font-size:12px; color:#cbd5e1; min-width:42px; text-align:center; }
+  #status { position:fixed; top:60px; left:12px; z-index:20; background:#fef3c7; border:1px solid #ca8a04; border-radius:6px; padding:6px 12px; font-size:12px; color:#713f12; }
+  #note { position:fixed; bottom:12px; left:12px; z-index:10; background:white; border:1px solid #e2e8f0; border-radius:8px; padding:10px 14px; font-size:12px; box-shadow:0 2px 8px rgba(0,0,0,.15); max-width:420px; opacity:0.95; }
+  #scroll-area { position:absolute; top:50px; left:0; right:0; bottom:0; overflow:auto; background:#f8fafc; }
+  #graph-wrapper { padding:24px; display:inline-block; }
+</style>
+</head>
+<body>
+
+<div id="toolbar">
+  <h1>AI Opportunity and Implementation Consultant — Модель данных (сущности и связи)</h1>
+  <button onclick="zoomOut()">− Уменьшить</button>
+  <span id="zoomLabel">100%</span>
+  <button onclick="zoomIn()">+ Увеличить</button>
+  <button onclick="resetZoom()">⤾ 100%</button>
+</div>
+
+<div id="status">Рендерю диаграмму…</div>
+<div id="note">⚠️ Черновик для обсуждения. CLIENT_APPLICATION ("Заявка") и её статусы — новая сущность, ещё не подтверждена владельцем продукта. LLM_PROVIDER_CONFIG — новая сущность под задачу переключения провайдера (OpenRouter/Gemini).</div>
+
+<div id="scroll-area">
+  <div id="graph-wrapper">
+    <div class="mermaid" id="graph">
+erDiagram
+    LEAD_INQUIRY {
+        string id PK
+        string niche
+        string company_size
+        string pain_text
+        datetime created_at
+    }
+    CLIENT {
+        string id PK
+        string name
+        string industry
+        datetime created_at
+    }
+    CLIENT_APPLICATION {
+        string id PK
+        string client_id FK
+        string status "ENUM - см. раздел статусов"
+        datetime created_at
+        datetime updated_at
+    }
+    MATERIAL {
+        string id PK
+        string application_id FK
+        string file_path
+        string file_type
+        string batch_id
+        datetime uploaded_at
+    }
+    EMPLOYEE {
+        string id PK
+        string application_id FK
+        string department
+        string role
+    }
+    DIGEST {
+        string id PK
+        string employee_id FK
+        string raw_transcript_path
+        string role
+        string pains
+        string metrics
+        string asr_uncertainties
+    }
+    CHUNK {
+        string id PK
+        string source_id FK
+        string text
+        int chunk_index
+        string metadata_json
+    }
+    PROCESS {
+        string id PK
+        string application_id FK
+        string name
+        string department
+        float automation_score
+        string implementation_type "CODE-AGENT-HYBRID-HUMAN_AI"
+        int priority
+    }
+    CLAIM {
+        string id PK
+        string parent_entity_id FK
+        string claim_type "FACT-CONCLUSION-HYPOTHESIS-ASSUMPTION"
+        string text
+        string source_chunk_id FK
+    }
+    MATURITY_SCORE {
+        string id PK
+        string application_id FK
+        int score_0_5
+        string justification
+    }
+    AS_IS_TO_BE {
+        string id PK
+        string process_id FK
+        string as_is_description
+        string to_be_description
+    }
+    ROADMAP_PHASE {
+        string id PK
+        string application_id FK
+        string name
+        string timeline
+        int phase_order
+    }
+    ROI_ESTIMATE {
+        string id PK
+        string process_id FK
+        float hours_low
+        float hours_high
+        float revenue_low
+        float revenue_high
+    }
+    REVIEW_EDIT {
+        string id PK
+        string application_id FK
+        string user_id FK
+        string field_changed
+        string old_value
+        string new_value
+        datetime edited_at
+    }
+    REPORT {
+        string id PK
+        string application_id FK
+        string format "HTML-PDF-DOCX-MD"
+        string file_path
+        datetime generated_at
+    }
+    BENCHMARK_PATTERN {
+        string id PK
+        string pattern_text
+        float confidence
+        int confirmations_count
+        int rejections_count
+    }
+    USER {
+        string id PK
+        string role "CONSULTANT-ADMIN"
+        string name
+    }
+    LLM_PROVIDER_CONFIG {
+        string id PK
+        string active_provider "GEMINI-OPENROUTER"
+        string active_model_id
+        datetime switched_at
+        string switched_by_user_id FK
+    }
+
+    LEAD_INQUIRY ||--o| CLIENT_APPLICATION : "конвертируется в"
+    CLIENT ||--o{ CLIENT_APPLICATION : "инициирует"
+    CLIENT_APPLICATION ||--o{ MATERIAL : "включает"
+    CLIENT_APPLICATION ||--o{ EMPLOYEE : "интервьюирует"
+    EMPLOYEE ||--o{ DIGEST : "порождает"
+    MATERIAL ||--o{ CHUNK : "разбивается на"
+    DIGEST ||--o{ CHUNK : "разбивается на"
+    CLIENT_APPLICATION ||--o{ PROCESS : "содержит"
+    PROCESS ||--o{ CLAIM : "обосновывается"
+    CHUNK ||--o{ CLAIM : "источник для"
+    CLIENT_APPLICATION ||--|| MATURITY_SCORE : "получает"
+    PROCESS ||--o| AS_IS_TO_BE : "описывается через"
+    CLIENT_APPLICATION ||--o{ ROADMAP_PHASE : "включает"
+    PROCESS ||--o| ROI_ESTIMATE : "оценивается"
+    CLIENT_APPLICATION ||--o{ REVIEW_EDIT : "проверяется через"
+    USER ||--o{ REVIEW_EDIT : "выполняет"
+    CLIENT_APPLICATION ||--o{ REPORT : "формирует"
+    PROCESS }o--o{ BENCHMARK_PATTERN : "сопоставляется с"
+    USER ||--o{ LLM_PROVIDER_CONFIG : "настраивает"
+    </div>
+  </div>
+</div>
+
+<script>
+  mermaid.initialize({ startOnLoad: true, theme: 'default', securityLevel: 'loose' });
+  let naturalWidth = 0, naturalHeight = 0, zoomLevel = 1.0;
+  function initSizing() {
+    const svgEl = document.querySelector('#graph-wrapper svg');
+    if (!svgEl) { setTimeout(initSizing, 200); return; }
+    const viewBox = svgEl.getAttribute('viewBox');
+    if (viewBox) {
+      const parts = viewBox.split(/\s+/).map(Number);
+      naturalWidth = parts[2]; naturalHeight = parts[3];
+    } else {
+      const bbox = svgEl.getBBox(); naturalWidth = bbox.width; naturalHeight = bbox.height;
+    }
+    svgEl.removeAttribute('style'); svgEl.style.display = 'block';
+    applyZoom(); document.getElementById('status').style.display = 'none';
+  }
+  function applyZoom() {
+    const svgEl = document.querySelector('#graph-wrapper svg');
+    if (!svgEl || !naturalWidth) return;
+    svgEl.setAttribute('width', Math.round(naturalWidth * zoomLevel) + 'px');
+    svgEl.setAttribute('height', Math.round(naturalHeight * zoomLevel) + 'px');
+    document.getElementById('zoomLabel').textContent = Math.round(zoomLevel * 100) + '%';
+  }
+  function zoomIn() { zoomLevel = Math.min(zoomLevel * 1.25, 6); applyZoom(); }
+  function zoomOut() { zoomLevel = Math.max(zoomLevel / 1.25, 0.15); applyZoom(); }
+  function resetZoom() { zoomLevel = 1.0; applyZoom(); }
+  window.addEventListener('load', () => setTimeout(initSizing, 400));
+</script>
+</body>
+</html>

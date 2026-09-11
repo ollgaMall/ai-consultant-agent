@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<title>Диаграмма статусов заявки — AI Opportunity and Implementation Consultant</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mermaid/10.6.1/mermaid.min.js"></script>
+<style>
+  html, body { margin:0; padding:0; height:100%; font-family:-apple-system,Segoe UI,Roboto,sans-serif; background:#f8fafc; }
+  #toolbar { position:fixed; top:0; left:0; right:0; z-index:10; background:#1e293b; color:white; padding:10px 16px; display:flex; align-items:center; gap:12px; box-shadow:0 2px 6px rgba(0,0,0,.2); }
+  #toolbar h1 { font-size:15px; margin:0; font-weight:600; flex:1; }
+  #toolbar button { background:#334155; color:white; border:none; padding:6px 12px; border-radius:6px; cursor:pointer; font-size:13px; }
+  #toolbar button:hover { background:#475569; }
+  #zoomLabel { font-size:12px; color:#cbd5e1; min-width:42px; text-align:center; }
+  #status { position:fixed; top:60px; left:12px; z-index:20; background:#fef3c7; border:1px solid #ca8a04; border-radius:6px; padding:6px 12px; font-size:12px; color:#713f12; }
+  #scroll-area { position:absolute; top:50px; left:0; right:0; bottom:0; overflow:auto; background:#f8fafc; }
+  #graph-wrapper { padding:24px; display:inline-block; }
+</style>
+</head>
+<body>
+<div id="toolbar">
+  <h1>Диаграмма статусов заявки (TASK-030)</h1>
+  <button onclick="zoomOut()">− Уменьшить</button>
+  <span id="zoomLabel">100%</span>
+  <button onclick="zoomIn()">+ Увеличить</button>
+  <button onclick="resetZoom()">⤾ 100%</button>
+</div>
+<div id="status">Рендерю диаграмму…</div>
+<div id="scroll-area">
+  <div id="graph-wrapper">
+    <div class="mermaid" id="graph">
+stateDiagram-v2
+    [*] --> NEW_LEAD : Telegram-бот TASK-023
+    NEW_LEAD --> AWAITING_DOCUMENTS : лид подтверждён, заявка создана TASK-002
+
+    AWAITING_DOCUMENTS --> AWAITING_DOCUMENTS_PAUSED : TASK-007 нашёл пробелы
+    AWAITING_DOCUMENTS_PAUSED --> AWAITING_DOCUMENTS : материалы дозагружены
+
+    AWAITING_DOCUMENTS --> ANKETA_CREATION : TASK-007 подтвердил полноту
+
+    ANKETA_CREATION --> AWAITING_DOCUMENTS_PAUSED : обнаружена нехватка данных в процессе сбора
+
+    ANKETA_CREATION --> ANALYSIS : сбор данных завершён TASK-005-007
+
+    ANALYSIS --> CONSULTANT_REVIEW : TASK-025 экспортирован для проверки
+
+    CONSULTANT_REVIEW --> ANALYSIS : консультант запросил повторный анализ
+    CONSULTANT_REVIEW --> REPORT_GENERATION : TASK-026 одобрено консультантом
+
+    REPORT_GENERATION --> AWAITING_CLIENT_FEEDBACK : отчёт передан клиенту
+
+    AWAITING_CLIENT_FEEDBACK --> CLOSED_COMPLETED : фидбек получен TASK-024
+
+    AWAITING_DOCUMENTS --> ERROR : сбой пайплайна
+    ANKETA_CREATION --> ERROR : сбой пайплайна TASK-006
+    ANALYSIS --> ERROR : сбой пайплайна TASK-009-017
+    ERROR --> AWAITING_DOCUMENTS : устранено вручную, возврат в прежнее состояние
+    ERROR --> CANCELLED : неустранимо
+
+    AWAITING_DOCUMENTS --> CANCELLED : решение клиента/консультанта
+    ANKETA_CREATION --> CANCELLED : решение клиента/консультанта
+    ANALYSIS --> CANCELLED : решение клиента/консультанта
+    CONSULTANT_REVIEW --> CANCELLED : решение клиента/консультанта
+
+    CLOSED_COMPLETED --> [*]
+    CANCELLED --> [*]
+
+    note right of CLOSED_COMPLETED
+        Успешное завершение —
+        "закрыта, отработана"
+    end note
+    note right of CANCELLED
+        Прервана до завершения —
+        не путать с CLOSED_COMPLETED
+    end note
+    note right of ERROR
+        Требует ручного вмешательства
+        консультанта, видно только ему
+    end note
+    </div>
+  </div>
+</div>
+<script>
+  mermaid.initialize({ startOnLoad: true, theme: 'default', securityLevel: 'loose' });
+  let naturalWidth=0, naturalHeight=0, zoomLevel=1.0;
+  function initSizing() {
+    const svgEl = document.querySelector('#graph-wrapper svg');
+    if (!svgEl) { setTimeout(initSizing, 200); return; }
+    const viewBox = svgEl.getAttribute('viewBox');
+    if (viewBox) { const p = viewBox.split(/\s+/).map(Number); naturalWidth=p[2]; naturalHeight=p[3]; }
+    else { const bbox = svgEl.getBBox(); naturalWidth=bbox.width; naturalHeight=bbox.height; }
+    svgEl.removeAttribute('style'); svgEl.style.display='block';
+    applyZoom(); document.getElementById('status').style.display='none';
+  }
+  function applyZoom() {
+    const svgEl = document.querySelector('#graph-wrapper svg');
+    if (!svgEl || !naturalWidth) return;
+    svgEl.setAttribute('width', Math.round(naturalWidth*zoomLevel)+'px');
+    svgEl.setAttribute('height', Math.round(naturalHeight*zoomLevel)+'px');
+    document.getElementById('zoomLabel').textContent = Math.round(zoomLevel*100)+'%';
+  }
+  function zoomIn(){ zoomLevel=Math.min(zoomLevel*1.25,6); applyZoom(); }
+  function zoomOut(){ zoomLevel=Math.max(zoomLevel/1.25,0.15); applyZoom(); }
+  function resetZoom(){ zoomLevel=1.0; applyZoom(); }
+  window.addEventListener('load', () => setTimeout(initSizing, 400));
+</script>
+</body>
+</html>

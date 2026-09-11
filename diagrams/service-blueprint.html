@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<title>Service Blueprint — точки взаимодействия с человеком</title>
+<style>
+  * { box-sizing: border-box; }
+  body { font-family: -apple-system, Segoe UI, Roboto, sans-serif; margin: 0; background: #f8fafc; }
+  #toolbar {
+    position: sticky; top: 0; z-index: 10; background: #1e293b; color: white;
+    padding: 14px 20px; font-size: 16px; font-weight: 600;
+  }
+  .scroll-wrap { overflow-x: auto; padding: 20px; }
+  table { border-collapse: collapse; min-width: 1400px; background: white; }
+  th, td { border: 1px solid #e2e8f0; padding: 10px 12px; vertical-align: top; font-size: 13px; }
+  th { background: #1e293b; color: white; text-align: left; font-size: 13px; position: sticky; top: 0; }
+  .row-label {
+    background: #f1f5f9; font-weight: 600; white-space: nowrap; position: sticky; left: 0; z-index: 2;
+  }
+  .lane-lead { background: #f3e8ff; }
+  .lane-client { background: #dbeafe; }
+  .lane-employee { background: #fef3c7; }
+  .lane-consultant { background: #fce7f3; }
+  .lane-admin { background: #ffe4e6; }
+  .line-of-interaction {
+    background: repeating-linear-gradient(45deg, #94a3b8, #94a3b8 10px, #cbd5e1 10px, #cbd5e1 20px);
+    color: white; text-align: center; font-weight: 700; font-size: 12px; padding: 4px; letter-spacing: 1px;
+  }
+  .backstage { background: #f0fdf4; }
+  .support { background: #eef2ff; font-style: italic; color: #4338ca; }
+  .task-ref { font-size: 11px; color: #64748b; display: block; margin-top: 3px; }
+  #legend {
+    display: flex; gap: 16px; flex-wrap: wrap; padding: 10px 20px; font-size: 12px; background: white;
+    border-top: 1px solid #e2e8f0;
+  }
+  #legend span { display: flex; align-items: center; gap: 6px; }
+  .dot { width: 12px; height: 12px; border-radius: 3px; display: inline-block; }
+</style>
+</head>
+<body>
+
+<div id="toolbar">AI Opportunity and Implementation Consultant — Service Blueprint (точки взаимодействия с человеком)</div>
+
+<div class="scroll-wrap">
+<table>
+  <tr>
+    <th style="position:sticky; left:0; z-index:3; background:#1e293b;">Роль / Этап →</th>
+    <th>Лид (потенциальный клиент)</th>
+    <th>Ожидание документов</th>
+    <th>Создание анкеты / сбор данных</th>
+    <th>Анализ</th>
+    <th>Проверка консультантом</th>
+    <th>Формирование отчёта</th>
+    <th>Закрыта (отработана)</th>
+  </tr>
+
+  <tr>
+    <td class="row-label lane-lead">👤 Лид / Потенциальный клиент</td>
+    <td class="lane-lead">Отвечает на 3 вопроса в Telegram-боте<span class="task-ref">TASK-023</span></td>
+    <td colspan="6" style="color:#94a3b8;">— становится Клиентом после конвертации —</td>
+  </tr>
+
+  <tr>
+    <td class="row-label lane-client">👤 Клиент</td>
+    <td class="lane-client">—</td>
+    <td class="lane-client">Загружает документы, видит статус "ожидание"<span class="task-ref">TASK-003, TASK-030 (статус)</span></td>
+    <td class="lane-client">Видит статус "в процессе", без деталей</td>
+    <td class="lane-client">—</td>
+    <td class="lane-client">Может видеть статус "финальная проверка"</td>
+    <td class="lane-client"><b>Получает готовый отчёт (HTML/PDF)</b>, подтверждает/отклоняет гипотезы<span class="task-ref">TASK-021→024</span></td>
+    <td class="lane-client">Видит статус "Закрыта"</td>
+  </tr>
+
+  <tr>
+    <td class="row-label lane-employee">👤 Сотрудник клиента</td>
+    <td class="lane-employee">—</td>
+    <td class="lane-employee">—</td>
+    <td class="lane-employee"><b>Заполняет анкету / даёт интервью (голос)</b><span class="task-ref">REQ-04, REQ-05, TASK-006</span></td>
+    <td class="lane-employee">—</td>
+    <td class="lane-employee">—</td>
+    <td class="lane-employee">—</td>
+    <td class="lane-employee">—</td>
+  </tr>
+
+  <tr>
+    <td class="row-label lane-consultant">👤 Консультант</td>
+    <td class="lane-consultant">Получает уведомление о новом лиде</td>
+    <td class="lane-consultant"><b>Загружает материалы, подтверждает "продолжать?"</b><span class="task-ref">TASK-003, TASK-007</span></td>
+    <td class="lane-consultant">Генерирует анкеты, следит за сбором<span class="task-ref">TASK-005</span></td>
+    <td class="lane-consultant">Наблюдает за прогрессом (пассивно)</td>
+    <td class="lane-consultant"><b>Правит YAML с результатами анализа</b><span class="task-ref">TASK-025/026</span></td>
+    <td class="lane-consultant">Выдаёт отчёт клиенту</td>
+    <td class="lane-consultant">Закрывает заявку</td>
+  </tr>
+
+  <tr>
+    <td class="row-label lane-admin">👤 Администратор</td>
+    <td class="lane-admin" colspan="7"><b>Переключает LLM-провайдера (Gemini/OpenRouter/Groq) через админ-панель — доступно на любом этапе, не привязано к конкретной заявке</b><span class="task-ref">TASK-032, TASK-033</span></td>
+  </tr>
+
+  <tr><td colspan="8" class="line-of-interaction">━━━━━━━━━━━━━━━━━━━━━ ЛИНИЯ ВИДИМОСТИ (выше — видит человек, ниже — только система) ━━━━━━━━━━━━━━━━━━━━━</td></tr>
+
+  <tr>
+    <td class="row-label backstage">⚙️ Backend-модули</td>
+    <td class="backstage">Создание preliminary заявки<span class="task-ref">TASK-002, TASK-023</span></td>
+    <td class="backstage">Manifest, проверка полноты<span class="task-ref">TASK-004, TASK-007</span></td>
+    <td class="backstage">Транскрипция, RAG-индексация<span class="task-ref">TASK-006, TASK-027-029</span></td>
+    <td class="backstage">Субагенты анализа + retrieval<span class="task-ref">TASK-009-017</span></td>
+    <td class="backstage">Экспорт/импорт для проверки<span class="task-ref">TASK-025/026</span></td>
+    <td class="backstage">Рендер HTML/PDF/DOCX/MD<span class="task-ref">TASK-018-021</span></td>
+    <td class="backstage">Обновление эталона<span class="task-ref">TASK-024</span></td>
+  </tr>
+
+  <tr>
+    <td class="row-label support">🗄️ Хранилища / провайдеры</td>
+    <td class="support">SQLite (заявка)</td>
+    <td class="support">SQLite (manifest, статус)</td>
+    <td class="support">GigaAM/Whisper, ChromaDB (RAG-индекс)</td>
+    <td class="support">Gemini/OpenRouter/Groq, ChromaDB (эталон + RAG)</td>
+    <td class="support">SQLite (review log)</td>
+    <td class="support">Файловая система (отчёты)</td>
+    <td class="support">ChromaDB (эталон обновлён)</td>
+  </tr>
+
+</table>
+</div>
+
+<div id="legend">
+  <span><span class="dot" style="background:#f3e8ff;"></span> Лид</span>
+  <span><span class="dot" style="background:#dbeafe;"></span> Клиент</span>
+  <span><span class="dot" style="background:#fef3c7;"></span> Сотрудник клиента</span>
+  <span><span class="dot" style="background:#fce7f3;"></span> Консультант</span>
+  <span><span class="dot" style="background:#ffe4e6;"></span> Администратор</span>
+  <span><span class="dot" style="background:#f0fdf4;"></span> Backend (только система)</span>
+  <span><span class="dot" style="background:#eef2ff;"></span> Хранилища/провайдеры</span>
+</div>
+
+</body>
+</html>

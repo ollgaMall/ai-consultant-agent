@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<title>AI Opportunity and Implementation Consultant — Архитектура модулей (с RAG)</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mermaid/10.6.1/mermaid.min.js"></script>
+<style>
+  html, body {
+    margin: 0; padding: 0; height: 100%;
+    font-family: -apple-system, Segoe UI, Roboto, sans-serif;
+    background: #f8fafc;
+  }
+  #toolbar {
+    position: fixed; top: 0; left: 0; right: 0; z-index: 10;
+    background: #1e293b; color: white; padding: 10px 16px;
+    display: flex; align-items: center; gap: 12px; box-shadow: 0 2px 6px rgba(0,0,0,.2);
+  }
+  #toolbar h1 { font-size: 15px; margin: 0; font-weight: 600; flex: 1; }
+  #toolbar button {
+    background: #334155; color: white; border: none; padding: 6px 12px;
+    border-radius: 6px; cursor: pointer; font-size: 13px;
+  }
+  #toolbar button:hover { background: #475569; }
+  #zoomLabel { font-size: 12px; color: #cbd5e1; min-width: 42px; text-align: center; }
+  #status {
+    position: fixed; top: 60px; left: 12px; z-index: 20;
+    background: #fef3c7; border: 1px solid #ca8a04; border-radius: 6px;
+    padding: 6px 12px; font-size: 12px; color: #713f12;
+  }
+  #legend {
+    position: fixed; bottom: 12px; left: 12px; z-index: 10;
+    background: white; border: 1px solid #e2e8f0; border-radius: 8px;
+    padding: 10px 14px; font-size: 12px; box-shadow: 0 2px 8px rgba(0,0,0,.15);
+    max-width: 330px; opacity: 0.95;
+  }
+  #legend div { margin: 3px 0; display: flex; align-items: center; gap: 8px; }
+  .dot { width: 12px; height: 12px; border-radius: 3px; display: inline-block; flex-shrink: 0; border-width: 2px; border-style: solid; }
+  #scroll-area {
+    position: absolute; top: 50px; left: 0; right: 0; bottom: 0;
+    overflow: auto;
+    background: #f8fafc;
+  }
+  #graph-wrapper { padding: 24px; display: inline-block; }
+</style>
+</head>
+<body>
+
+<div id="toolbar">
+  <h1>AI Opportunity and Implementation Consultant — Схема модулей (TASK-002–TASK-029, с RAG)</h1>
+  <button onclick="zoomOut()">− Уменьшить</button>
+  <span id="zoomLabel">100%</span>
+  <button onclick="zoomIn()">+ Увеличить</button>
+  <button onclick="resetZoom()">⤾ 100%</button>
+</div>
+
+<div id="status">Рендерю диаграмму…</div>
+
+<div id="legend">
+  <div><span class="dot" style="background:#dbeafe;border-color:#2563eb;"></span> Обычный код (детерминированный)</div>
+  <div><span class="dot" style="background:#fed7aa;border-color:#ea580c;"></span> AI-субагент (рассуждает, Gemini)</div>
+  <div><span class="dot" style="background:#fef3c7;border-color:#ca8a04;"></span> AI-модель восприятия (речь→текст, локально)</div>
+  <div><span class="dot" style="background:#dcfce7;border-color:#16a34a;"></span> Хранилище / память</div>
+  <div><span class="dot" style="background:#f3e8ff;border-color:#9333ea;"></span> Внешний интерфейс</div>
+  <div><span class="dot" style="background:#fce7f3;border-color:#db2777;"></span> Точка ручной проверки консультантом</div>
+  <div><span class="dot" style="background:#cffafe;border-color:#0891b2;"></span> RAG-пайплайн (chunk / store / retrieve)</div>
+</div>
+
+<div id="scroll-area">
+  <div id="graph-wrapper">
+    <div class="mermaid" id="graph">
+flowchart TB
+    subgraph INPUT["1. ВХОД (TASK-002,003,004,007)"]
+        direction LR
+        T002["project_structure<br/>TASK-002"]:::code
+        T003["material_upload<br/>TASK-003"]:::code
+        T004["manifest<br/>TASK-004"]:::code
+        T007["completeness_check<br/>TASK-007"]:::code
+        T002 --> T003 --> T004 --> T007
+    end
+
+    subgraph COLLECT["2. СБОР ДАННЫХ (TASK-005,006)"]
+        direction LR
+        T005["questionnaire_generator<br/>TASK-005"]:::code
+        T006["audio_digest<br/>GigaAM / Whisper<br/>TASK-006"]:::perception
+    end
+
+    subgraph RAG["RAG-ПАЙПЛАЙН (TASK-027,028,029) - НОВОЕ"]
+        direction LR
+        T027["chunker<br/>TASK-027"]:::rag
+        T028["client_document_store<br/>ChromaDB, коллекция на клиента<br/>TASK-028"]:::rag
+        T029["retriever<br/>TASK-029"]:::rag
+        T027 --> T028
+        T028 <--> T029
+    end
+
+    subgraph ANALYSIS["3. АНАЛИЗ ПРОЦЕССОВ (TASK-008-017)"]
+        direction TB
+        T008["Claim / маркировка<br/>ФАКТ-ВЫВОД-ГИПОТЕЗА<br/>TASK-008"]:::code
+        T009["process_discovery<br/>обновлена под RAG<br/>TASK-009"]:::agent
+        T010["automation_scoring<br/>TASK-010"]:::code
+        T011["implementation_classifier<br/>обновлена под RAG<br/>TASK-011"]:::agent
+        T012["maturity_assessment<br/>обновлена под RAG<br/>TASK-012"]:::agent
+        T013["as_is_to_be<br/>обновлена под RAG<br/>TASK-013"]:::agent
+        T014["process_map<br/>TASK-014"]:::code
+        T015["drawio_export<br/>TASK-015"]:::code
+        T016["roadmap<br/>без изменений<br/>TASK-016"]:::agent
+        T017["roi_estimator<br/>TASK-017"]:::code
+
+        T009 --> T010 --> T011 --> T012
+        T011 --> T013
+        T010 --> T014 --> T015
+        T012 --> T016
+        T013 --> T016
+        T010 --> T017
+    end
+
+    subgraph REVIEW["ТОЧКА РУЧНОЙ ПРОВЕРКИ (TASK-025, TASK-026)"]
+        direction LR
+        T025["export_for_review<br/>TASK-025"]:::human
+        T026["import_reviewed_edits<br/>TASK-026"]:::human
+        T025 -->|"консультант правит<br/>YAML вручную"| T026
+    end
+
+    subgraph REPORT["4. ОТЧЁТ (TASK-018-021)"]
+        direction LR
+        T018["report_model<br/>сборщик<br/>TASK-018"]:::code
+        T019["HTML+PDF<br/>для клиента<br/>TASK-019"]:::code
+        T020["DOCX<br/>для разработчиков<br/>TASK-020"]:::code
+        T021["Markdown<br/>внутренний<br/>TASK-021"]:::code
+        T018 --> T019
+        T018 --> T020
+        T018 --> T021
+    end
+
+    subgraph MEMORY["5. ПАМЯТЬ / ЭТАЛОН (TASK-022,024)"]
+        direction LR
+        T022["benchmark_repository<br/>ChromaDB self-hosted<br/>отдельная коллекция<br/>TASK-022"]:::storage
+        T024["hypothesis_validation<br/>2 источника: клиент + консультант<br/>TASK-024"]:::code
+    end
+
+    subgraph LEADGEN["6. ЛИДГЕН (TASK-023)"]
+        T023["Telegram-бот<br/>TASK-023"]:::external
+    end
+
+    T004 -.manifest.-> T007
+    T007 -.проверенные материалы.-> T005
+    T007 -.аудио.-> T006
+    T006 -."digest сотрудника".-> T027
+    T003 -."документы".-> T027
+    T029 -."релевантные чанки".-> T009
+    T029 -."релевантные чанки".-> T011
+    T029 -."релевантные чанки".-> T012
+    T029 -."релевантные чанки".-> T013
+    T009 -."процессы".-> T022
+    T012 --> T025
+    T013 --> T025
+    T014 --> T025
+    T016 --> T025
+    T017 --> T025
+    T026 -."одобренные данные".-> T018
+    T008 -."маркировка".-> T009
+    T008 -."маркировка".-> T011
+    T008 -."маркировка".-> T012
+    T008 -."маркировка".-> T013
+    T008 -."маркировка".-> T016
+    T008 -."маркировка".-> T021
+    T022 -."похожие паттерны".-> T009
+    T021 -."решение клиента".-> T024
+    T026 -."правки консультанта".-> T024
+    T024 -."обновление (веса равны, MVP)".-> T022
+    T023 -."анкета лида".-> T002
+
+    classDef code fill:#dbeafe,stroke:#2563eb,stroke-width:2px,color:#1e3a8a
+    classDef agent fill:#fed7aa,stroke:#ea580c,stroke-width:2px,color:#7c2d12
+    classDef perception fill:#fef3c7,stroke:#ca8a04,stroke-width:2px,color:#713f12
+    classDef storage fill:#dcfce7,stroke:#16a34a,stroke-width:2px,color:#14532d
+    classDef external fill:#f3e8ff,stroke:#9333ea,stroke-width:2px,color:#581c87
+    classDef human fill:#fce7f3,stroke:#db2777,stroke-width:2px,color:#831843
+    classDef rag fill:#cffafe,stroke:#0891b2,stroke-width:2px,color:#164e63
+    </div>
+  </div>
+</div>
+
+<script>
+  mermaid.initialize({
+    startOnLoad: true,
+    theme: 'default',
+    securityLevel: 'loose',
+    flowchart: { curve: 'basis', htmlLabels: true }
+  });
+
+  let naturalWidth = 0, naturalHeight = 0, zoomLevel = 1.0;
+
+  function initSizing() {
+    const svgEl = document.querySelector('#graph-wrapper svg');
+    if (!svgEl) { setTimeout(initSizing, 200); return; }
+
+    const viewBox = svgEl.getAttribute('viewBox');
+    if (viewBox) {
+      const parts = viewBox.split(/\s+/).map(Number);
+      naturalWidth = parts[2];
+      naturalHeight = parts[3];
+    } else {
+      const bbox = svgEl.getBBox();
+      naturalWidth = bbox.width;
+      naturalHeight = bbox.height;
+    }
+
+    svgEl.removeAttribute('style');
+    svgEl.style.display = 'block';
+    applyZoom();
+    document.getElementById('status').style.display = 'none';
+  }
+
+  function applyZoom() {
+    const svgEl = document.querySelector('#graph-wrapper svg');
+    if (!svgEl || !naturalWidth) return;
+    svgEl.setAttribute('width', Math.round(naturalWidth * zoomLevel) + 'px');
+    svgEl.setAttribute('height', Math.round(naturalHeight * zoomLevel) + 'px');
+    document.getElementById('zoomLabel').textContent = Math.round(zoomLevel * 100) + '%';
+  }
+
+  function zoomIn() { zoomLevel = Math.min(zoomLevel * 1.25, 6); applyZoom(); }
+  function zoomOut() { zoomLevel = Math.max(zoomLevel / 1.25, 0.15); applyZoom(); }
+  function resetZoom() { zoomLevel = 1.0; applyZoom(); }
+
+  window.addEventListener('load', () => setTimeout(initSizing, 400));
+</script>
+
+</body>
+</html>
