@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<title>Execution Flow — AI Opportunity and Implementation Consultant (Уровень 2: продукт)</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mermaid/10.6.1/mermaid.min.js"></script>
+<style>
+  html, body { margin:0; padding:0; height:100%; font-family:-apple-system,Segoe UI,Roboto,sans-serif; background:#f8fafc; }
+  #toolbar { position:fixed; top:0; left:0; right:0; z-index:10; background:#1e293b; color:white; padding:10px 16px; display:flex; align-items:center; gap:12px; box-shadow:0 2px 6px rgba(0,0,0,.2); }
+  #toolbar h1 { font-size:14px; margin:0; font-weight:600; flex:1; }
+  #toolbar button { background:#334155; color:white; border:none; padding:6px 12px; border-radius:6px; cursor:pointer; font-size:13px; }
+  #toolbar button:hover { background:#475569; }
+  #zoomLabel { font-size:12px; color:#cbd5e1; min-width:42px; text-align:center; }
+  #status { position:fixed; top:60px; left:12px; z-index:20; background:#fef3c7; border:1px solid #ca8a04; border-radius:6px; padding:6px 12px; font-size:12px; color:#713f12; }
+  #legend { position:fixed; bottom:12px; left:12px; z-index:10; background:white; border:1px solid #e2e8f0; border-radius:8px; padding:10px 14px; font-size:12px; box-shadow:0 2px 8px rgba(0,0,0,.15); max-width:360px; opacity:0.95; }
+  #legend div { margin:3px 0; }
+  #scroll-area { position:absolute; top:50px; left:0; right:0; bottom:0; overflow:auto; background:#f8fafc; }
+  #graph-wrapper { padding:24px; display:inline-block; }
+</style>
+</head>
+<body>
+<div id="toolbar">
+  <h1>Execution Flow — Уровень 2 (продукт): что запускает, чего ждёт, куда идёт результат, что значит "готово"</h1>
+  <button onclick="zoomOut()">− Уменьшить</button>
+  <span id="zoomLabel">100%</span>
+  <button onclick="zoomIn()">+ Увеличить</button>
+  <button onclick="resetZoom()">⤾ 100%</button>
+</div>
+<div id="status">Рендерю диаграмму…</div>
+<div id="legend">
+  <div>🟢 <b>Trigger</b> — запускается извне/человеком/расписанием</div>
+  <div>⚙️ <b>Action</b> — автоматический шаг</div>
+  <div>🔀 <b>IF/Switch</b> — ветвление (fallback, бизнес-правило)</div>
+  <div>⏸ <b>Wait</b> — ждёт решения человека</div>
+  <div>🔗 <b>Merge</b> — сводит несколько потоков</div>
+  <div>Пунктир = вызов сквозного сервиса (не основной поток данных)</div>
+</div>
+<div id="scroll-area">
+  <div id="graph-wrapper">
+    <div class="mermaid" id="graph">
+flowchart TB
+    N1(["🟢 1. Создание проекта клиента<br/>TASK-002"])
+    N2["⚙️ 2. Загрузка материала<br/>TASK-003"]
+    N3["⚙️ 3. Manifest<br/>TASK-004"]
+    N4{{"⏸ 4. Проверка полноты<br/>TASK-007"}}
+    N5["⚙️ 5. Генерация анкет<br/>TASK-005"]
+    N6{"🔀 6. Транскрипция+Digest<br/>TASK-006"}
+    N7["⚙️ 7. RAG-индексация<br/>TASK-027+028"]
+    N8["⚙️ 8. Retriever<br/>TASK-029"]
+    N9["⚙️ 9. Claim/маркировка<br/>TASK-008 (сквозной)"]
+    N10["⚙️ 10. Обнаружение процессов<br/>TASK-009"]
+    N11["⚙️ 11. Скоринг автоматизации<br/>TASK-010"]
+    N12{"🔀 12. Классификация<br/>TASK-011"}
+    N13["⚙️ 13. Оценка зрелости<br/>TASK-012"]
+    N14["⚙️ 14. AS-IS/TO-BE<br/>TASK-013"]
+    N15["🔗 15. Карта процессов<br/>TASK-014"]
+    N16["⚙️ 16. Экспорт Draw.io<br/>TASK-015"]
+    N17["🔗 17. Дорожная карта<br/>TASK-016"]
+    N18["⚙️ 18. ROI-калькулятор<br/>TASK-017"]
+    N19["⚙️ 19. Экспорт на проверку<br/>TASK-025"]
+    N20{{"⏸ 20. Импорт правок консультанта<br/>TASK-026"}}
+    N21["🔗 21. Сборка модели отчёта<br/>TASK-018"]
+    N22["⚙️ 22. Рендер HTML/PDF<br/>TASK-019"]
+    N23["⚙️ 23. Рендер DOCX<br/>TASK-020"]
+    N24["⚙️ 24. Рендер Markdown<br/>TASK-021"]
+    N25["⚙️ 25. Валидация гипотез<br/>TASK-024 (2 источника)"]
+    N26["⚙️ 26. Хранилище эталона<br/>TASK-022 (сквозной)"]
+    N27["⚙️ 27. Статус заявки<br/>TASK-030 (сквозной)"]
+    N28(["🟢 28. Резервное копирование<br/>TASK-031 (cron)"])
+    N29["⚙️ 29. LLM-провайдер<br/>TASK-032 (сквозной)"]
+
+    N1 --> N2 --> N3 --> N4
+    N4 -->|"продолжить"| N5
+    N4 -->|"продолжить"| N6
+    N4 -.->|"пробелы"| N4PAUSE(["ПРИОСТАНОВЛЕНО"])
+    N2 -.-> N7
+    N6 --> N7
+    N7 --> N8
+    N8 -.-> N10
+    N8 -.-> N12
+    N8 -.-> N13
+    N8 -.-> N14
+
+    N10 --> N11
+    N11 --> N12
+    N11 --> N15
+    N11 --> N18
+    N12 --> N13
+    N12 --> N14
+    N14 --> N17
+    N15 --> N16
+    N15 --> N17
+    N15 --> N19
+    N13 --> N19
+    N14 --> N19
+    N17 --> N19
+    N18 --> N19
+
+    N19 --> N20
+    N20 --> N21
+    N20 -.-> N25
+    N21 --> N22
+    N21 --> N23
+    N21 --> N24
+
+    N24 -.-> N25EXT(["Клиент: экран 8"])
+    N25EXT -.-> N25
+    N25 --> N26
+    N10 -.-> N26
+
+    N9 -.-> N10
+    N9 -.-> N12
+    N9 -.-> N13
+    N9 -.-> N14
+    N9 -.-> N17
+    N9 -.-> N24
+
+    N29 -.-> N10
+    N29 -.-> N12
+    N29 -.-> N13
+    N29 -.-> N14
+    N29 -.-> N17
+
+    N1 -.-> N27
+    N4 -.-> N27
+    N20 -.-> N27
+    N21 -.-> N27
+    N25 -.-> N27
+
+    N28 -.->|"собственное расписание"| N26
+    N28 -.-> N27DB[("SQLite")]
+
+    classDef trigger fill:#dcfce7,stroke:#16a34a,stroke-width:2px,color:#14532d
+    classDef action fill:#dbeafe,stroke:#2563eb,stroke-width:2px,color:#1e3a8a
+    classDef ifswitch fill:#fed7aa,stroke:#ea580c,stroke-width:2px,color:#7c2d12
+    classDef wait fill:#fce7f3,stroke:#db2777,stroke-width:2px,color:#831843
+    classDef merge fill:#e0e7ff,stroke:#4338ca,stroke-width:2px,color:#312e81
+    classDef cross fill:#fef9c3,stroke:#ca8a04,stroke-width:2px,color:#713f12
+    classDef ext fill:#f3e8ff,stroke:#9333ea,stroke-width:2px,color:#581c87,stroke-dasharray: 4 3
+
+    class N1,N28 trigger
+    class N2,N3,N5,N7,N8,N10,N11,N13,N14,N16,N18,N19,N21,N22,N23,N24 action
+    class N4,N20 wait
+    class N6,N12 ifswitch
+    class N15,N17,N21 merge
+    class N9,N26,N27,N29 cross
+    class N4PAUSE,N25EXT ext
+    </div>
+  </div>
+</div>
+<script>
+  mermaid.initialize({ startOnLoad: true, theme: 'default', securityLevel: 'loose', flowchart: { curve: 'basis' } });
+  let naturalWidth=0, naturalHeight=0, zoomLevel=0.7;
+  function initSizing() {
+    const svgEl = document.querySelector('#graph-wrapper svg');
+    if (!svgEl) { setTimeout(initSizing, 200); return; }
+    const viewBox = svgEl.getAttribute('viewBox');
+    if (viewBox) { const p = viewBox.split(/\s+/).map(Number); naturalWidth=p[2]; naturalHeight=p[3]; }
+    else { const bbox = svgEl.getBBox(); naturalWidth=bbox.width; naturalHeight=bbox.height; }
+    svgEl.removeAttribute('style'); svgEl.style.display='block';
+    applyZoom(); document.getElementById('status').style.display='none';
+  }
+  function applyZoom() {
+    const svgEl = document.querySelector('#graph-wrapper svg');
+    if (!svgEl || !naturalWidth) return;
+    svgEl.setAttribute('width', Math.round(naturalWidth*zoomLevel)+'px');
+    svgEl.setAttribute('height', Math.round(naturalHeight*zoomLevel)+'px');
+    document.getElementById('zoomLabel').textContent = Math.round(zoomLevel*100)+'%';
+  }
+  function zoomIn(){ zoomLevel=Math.min(zoomLevel*1.25,6); applyZoom(); }
+  function zoomOut(){ zoomLevel=Math.max(zoomLevel/1.25,0.15); applyZoom(); }
+  function resetZoom(){ zoomLevel=0.7; applyZoom(); }
+  window.addEventListener('load', () => setTimeout(initSizing, 400));
+</script>
+</body>
+</html>

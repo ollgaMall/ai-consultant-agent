@@ -1,0 +1,1 @@
+"""Ingestion subpackage: client project structure and material intake."""

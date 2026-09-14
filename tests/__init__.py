@@ -1,0 +1,1 @@
+"""Test suite for the AI Opportunity and Implementation Consultant project."""
