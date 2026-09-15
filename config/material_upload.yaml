@@ -1,0 +1,32 @@
+# Configuration for material upload (TASK-003 / REQ-01).
+# Consumed by src/ingestion/material_upload.py.
+
+batch_id:
+  # Strategy for generate_batch_id():
+  #   uuid4     - random UUIDv4 (globally unique; default)
+  #   timestamp - UTC timestamp formatted per timestamp_format
+  #
+  # NOTE (N-002 from ChatGPT review, iteration 1): the timestamp format
+  # includes microseconds (%f) so that two upload actions triggered within
+  # the same wall-clock second still receive distinct batch_id values.
+  # UUID4 remains the recommended default.
+  strategy: uuid4
+  timestamp_format: '%Y%m%d-%H%M%S-%f'
+
+# Material types accepted by register_material(). Case-insensitive.
+# 'AUDIO' is a generic tag; specific audio extensions are accepted as-is,
+# without codec validation (per TASK-003 scope).
+supported_material_types:
+  - DOC
+  - DOCX
+  - TXT
+  - MD
+  - XLS
+  - XLSX
+  - AUDIO
+  - MP3
+  - WAV
+  - M4A
+  - OGG
+  - FLAC
+  - AAC
