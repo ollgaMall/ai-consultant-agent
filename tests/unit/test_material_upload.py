@@ -23,23 +23,14 @@ from src.ingestion.material_upload import (
 )
 from src.ingestion.validation import InvalidPathComponentError
 
-# All register_material tests require POSIX dir_fd support (see module
-# docstring, and ChatGPT review C-001, iteration 2). On platforms without it
-# register_material raises OSError by design.
 pytestmark = pytest.mark.skipif(
     not _HAS_DIR_FD_SUPPORT,
     reason="register_material requires POSIX dir_fd / O_DIRECTORY / O_NOFOLLOW.",
 )
 
 
-# ---------------------------------------------------------------------------
-# Fixtures
-# ---------------------------------------------------------------------------
-
-
 @pytest.fixture
 def material_config(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
-    """Write a minimal material_upload config and point env var to it."""
     cfg = tmp_path / "material_upload.yaml"
     cfg.write_text(
         "batch_id:\n"
@@ -61,7 +52,6 @@ def material_config(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
 
 @pytest.fixture
 def client_project(tmp_path: Path) -> Path:
-    """Create a minimal client project structure (as TASK-002 would)."""
     project = tmp_path / "client-1"
     for sub in (
         "01-transcripts",
@@ -81,16 +71,10 @@ def sample_file(tmp_path: Path) -> Path:
     return f
 
 
-# ---------------------------------------------------------------------------
-# generate_batch_id
-# ---------------------------------------------------------------------------
-
-
 def test_generate_batch_id_uuid4_unique(material_config: Path) -> None:
     ids = {generate_batch_id() for _ in range(50)}
     assert len(ids) == 50
     for bid in ids:
-        # Validates format; raises ValueError if not a UUID.
         uuid.UUID(bid)
 
 
@@ -113,8 +97,6 @@ def test_generate_batch_id_timestamp_strategy(
 def test_generate_batch_id_timestamp_microsecond_precision(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """N-001 (iter 2): with microsecond precision, consecutive ids in the
-    same second must be distinct."""
     cfg = tmp_path / "cfg.yaml"
     cfg.write_text(
         "batch_id:\n"
@@ -151,11 +133,6 @@ def test_generate_batch_id_missing_config(
     )
     with pytest.raises(FileNotFoundError):
         generate_batch_id()
-
-
-# ---------------------------------------------------------------------------
-# register_material - happy path
-# ---------------------------------------------------------------------------
 
 
 def test_register_happy_path(
@@ -210,7 +187,6 @@ def test_register_preserves_byte_content(
 def test_register_case_insensitive_type(
     material_config: Path, client_project: Path, sample_file: Path
 ) -> None:
-    # Validation is case-insensitive; stored value is preserved as passed.
     record = register_material(client_project, sample_file, "txt", "b1")
     assert record.type == "txt"
 
@@ -240,11 +216,6 @@ def test_register_multiple_files_same_batch(
     ]
 
 
-# ---------------------------------------------------------------------------
-# register_material - validation errors
-# ---------------------------------------------------------------------------
-
-
 def test_register_unsupported_type(
     material_config: Path, client_project: Path, sample_file: Path
 ) -> None:
@@ -268,7 +239,6 @@ def test_register_invalid_batch_id_dotdot(
         register_material(client_project, sample_file, "TXT", "..")
 
 
-# N-002 (iter 5): '..' as a substring must also be rejected via public API.
 def test_register_invalid_batch_id_with_dotdot_substring(
     material_config: Path, client_project: Path, sample_file: Path
 ) -> None:
@@ -310,8 +280,6 @@ def test_register_invalid_filename_with_backslash(
         register_material(client_project, bad, "TXT", "b1")
 
 
-# N-002 (iter 5): '..' as a substring in the filename must be rejected
-# via the public API, and the file must not be copied.
 def test_register_invalid_filename_with_dotdot_substring(
     material_config: Path, client_project: Path, tmp_path: Path
 ) -> None:
@@ -319,7 +287,6 @@ def test_register_invalid_filename_with_dotdot_substring(
     bad.write_text("data", encoding="utf-8")
     with pytest.raises(InvalidPathComponentError):
         register_material(client_project, bad, "TXT", "b1")
-    # Nothing was written into the batch directory (it was never created).
     batch_dir = client_project / "05-client-materials" / "b1"
     assert not batch_dir.exists()
 
@@ -327,7 +294,6 @@ def test_register_invalid_filename_with_dotdot_substring(
 def test_register_invalid_empty_basename(
     material_config: Path, client_project: Path
 ) -> None:
-    """Path('.') has .name == '' -> must be rejected before any FS access."""
     with pytest.raises(InvalidPathComponentError):
         register_material(client_project, Path("."), "TXT", "b1")
 
@@ -335,7 +301,6 @@ def test_register_invalid_empty_basename(
 def test_register_invalid_dotdot_basename(
     material_config: Path, client_project: Path
 ) -> None:
-    """Path('..') has .name == '..' -> rejected by validator."""
     with pytest.raises(InvalidPathComponentError):
         register_material(client_project, Path(".."), "TXT", "b1")
 
@@ -343,7 +308,6 @@ def test_register_invalid_dotdot_basename(
 def test_register_invalid_whitespace_basename(
     material_config: Path, client_project: Path, tmp_path: Path
 ) -> None:
-    """Whitespace-only basename -> rejected if the OS allows creating such a file."""
     bad = tmp_path / "   "
     try:
         bad.write_text("x", encoding="utf-8")
@@ -351,11 +315,6 @@ def test_register_invalid_whitespace_basename(
         pytest.skip("Filesystem refuses whitespace-only filename")
     with pytest.raises(InvalidPathComponentError):
         register_material(client_project, bad, "TXT", "b1")
-
-
-# ---------------------------------------------------------------------------
-# register_material - filesystem errors
-# ---------------------------------------------------------------------------
 
 
 def test_register_source_not_found(
@@ -392,11 +351,6 @@ def test_register_client_project_is_file(
         register_material(f, sample_file, "TXT", "b1")
 
 
-# ---------------------------------------------------------------------------
-# register_material - collision semantics (C-001, iter 1)
-# ---------------------------------------------------------------------------
-
-
 def test_register_collision_within_same_batch(
     material_config: Path, client_project: Path, sample_file: Path
 ) -> None:
@@ -419,7 +373,6 @@ def test_register_no_collision_across_batches(
 def test_register_atomic_under_contention(
     material_config: Path, client_project: Path, sample_file: Path
 ) -> None:
-    """O_EXCL guarantees exactly one winner under contention."""
     results: list[str] = []
     barrier = threading.Barrier(2)
 
@@ -441,20 +394,12 @@ def test_register_atomic_under_contention(
     assert sorted(results) == ["dup", "ok"]
 
 
-# ---------------------------------------------------------------------------
-# register_material - partial write handling (C-002, iter 3)
-# ---------------------------------------------------------------------------
-
-
 def test_register_handles_partial_writes(
     material_config: Path,
     client_project: Path,
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """os.write may perform short writes; the module must loop until the
-    full buffer is written. Simulate 1-byte-per-call writes and assert the
-    destination matches the source byte-for-byte."""
     real_write = mu.os.write
 
     def tiny_write(fd: int, data) -> int:
@@ -462,17 +407,12 @@ def test_register_handles_partial_writes(
 
     monkeypatch.setattr(mu.os, "write", tiny_write)
 
-    payload = b"ABCDEFGHIJ" * 100  # 1000 bytes
+    payload = b"ABCDEFGHIJ" * 100
     src = tmp_path / "partial.txt"
     src.write_bytes(payload)
 
     record = register_material(client_project, src, "TXT", "b1")
     assert record.path.read_bytes() == payload
-
-
-# ---------------------------------------------------------------------------
-# register_material - read-error handling during target hashing (C-001, iter 4)
-# ---------------------------------------------------------------------------
 
 
 def test_register_read_error_during_hash_rolls_back(
@@ -481,15 +421,10 @@ def test_register_read_error_during_hash_rolls_back(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """N-004 (iter 4): an OSError from os.read inside _fd_sha256 must be
-    wrapped in a local OSError with context, and the partially-written
-    target must be rolled back."""
     src = tmp_path / "hash-fail.txt"
     src.write_text("content that will be hashed", encoding="utf-8")
 
     def failing_read(fd: int, n: int) -> bytes:
-        # os.read is used only by _fd_sha256 in this module: source-side
-        # reads go through file-object .read(), not os.read.
         raise OSError("simulated read failure")
 
     monkeypatch.setattr(mu.os, "read", failing_read)
@@ -497,15 +432,80 @@ def test_register_read_error_during_hash_rolls_back(
     with pytest.raises(OSError, match="Failed to hash target"):
         register_material(client_project, src, "TXT", "b1")
 
-    # Rollback: the batch directory exists but is empty.
     batch_dir = client_project / "05-client-materials" / "b1"
     assert batch_dir.is_dir()
     assert list(batch_dir.iterdir()) == []
 
 
-# ---------------------------------------------------------------------------
-# register_material - symlink safety
-# ---------------------------------------------------------------------------
+def test_register_hash_mismatch_removes_target(
+    material_config: Path,
+    client_project: Path,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    src = tmp_path / "hash-mismatch.txt"
+    src.write_text("some content", encoding="utf-8")
+
+    def fake_fd_sha256(fd: int) -> str:
+        try:
+            while os.read(fd, 65536):
+                pass
+        except OSError:
+            pass
+        return "0" * 64
+
+    monkeypatch.setattr(mu, "_fd_sha256", fake_fd_sha256)
+
+    with pytest.raises(OSError, match="Hash mismatch"):
+        register_material(client_project, src, "TXT", "b1")
+
+    batch_dir = client_project / "05-client-materials" / "b1"
+    assert batch_dir.is_dir()
+    assert list(batch_dir.iterdir()) == []
+
+
+def test_register_write_returns_zero_raises(
+    material_config: Path,
+    client_project: Path,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    src = tmp_path / "zero-write.txt"
+    src.write_text("payload that will not be written", encoding="utf-8")
+
+    def zero_write(fd: int, data) -> int:
+        return 0
+
+    monkeypatch.setattr(mu.os, "write", zero_write)
+
+    with pytest.raises(OSError):
+        register_material(client_project, src, "TXT", "b1")
+
+    batch_dir = client_project / "05-client-materials" / "b1"
+    assert batch_dir.is_dir()
+    assert list(batch_dir.iterdir()) == []
+
+
+def test_register_write_error_during_copy_rolls_back(
+    material_config: Path,
+    client_project: Path,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    src = tmp_path / "copy-fail.txt"
+    src.write_text("data", encoding="utf-8")
+
+    def failing_copy(source_path: Path, target_fd: int) -> None:
+        raise OSError("simulated copy failure")
+
+    monkeypatch.setattr(mu, "_copy_bytes_into_fd", failing_copy)
+
+    with pytest.raises(OSError, match="Failed to copy"):
+        register_material(client_project, src, "TXT", "b1")
+
+    batch_dir = client_project / "05-client-materials" / "b1"
+    assert batch_dir.is_dir()
+    assert list(batch_dir.iterdir()) == []
 
 
 def test_register_rejects_symlinked_materials_dir(
@@ -538,8 +538,6 @@ def test_register_rejects_symlinked_batch_dir(
 def test_register_target_symlink_is_rejected(
     material_config: Path, client_project: Path, sample_file: Path, tmp_path: Path
 ) -> None:
-    """O_EXCL must reject a pre-existing symlink named like the target,
-    without ever following it (no write-through)."""
     batch_dir = client_project / "05-client-materials" / "b1"
     batch_dir.mkdir(parents=True)
     outside_target = tmp_path / "outside.txt"
@@ -554,8 +552,6 @@ def test_register_target_symlink_is_rejected(
 def test_register_rejects_symlinked_materials_dir_even_inside_project(
     material_config: Path, client_project: Path, sample_file: Path
 ) -> None:
-    """O_NOFOLLOW rejects a symlink at 05-client-materials even if the target
-    is inside the project - defence in depth, not only escape prevention."""
     materials_dir = client_project / "05-client-materials"
     shutil.rmtree(materials_dir)
     inside = client_project / "01-transcripts"
@@ -569,9 +565,6 @@ def test_register_rejects_symlinked_materials_dir_even_inside_project(
 def test_register_rejects_symlinked_project_root(
     material_config: Path, sample_file: Path, tmp_path: Path
 ) -> None:
-    """C-001, iteration 3: the root client_project_path itself must be
-    opened with O_NOFOLLOW, so a symlinked root is rejected before any
-    dir_fd traversal begins."""
     real_project = tmp_path / "real-project"
     for sub in (
         "01-transcripts",
@@ -588,14 +581,8 @@ def test_register_rejects_symlinked_project_root(
     with pytest.raises(OSError):
         register_material(link_project, sample_file, "TXT", "b1")
 
-    # Nothing was written inside the real project via the symlinked root.
     materials_dir = real_project / "05-client-materials"
     assert list(materials_dir.iterdir()) == []
-
-
-# ---------------------------------------------------------------------------
-# register_material - config errors
-# ---------------------------------------------------------------------------
 
 
 def test_register_missing_config(

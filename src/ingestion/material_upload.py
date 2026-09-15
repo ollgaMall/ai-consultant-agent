@@ -11,7 +11,8 @@ Provides:
       :class:`MaterialAlreadyExistsError`,
       :class:`SourceFileNotFoundError` - domain-specific error types.
 
-Security model (after ChatGPT review, iterations 1-5):
+Security model (after ChatGPT review, iterations 1-5, Kimi test-run,
+iteration 6, and fix in iteration 7):
 
     * **No check-then-use anywhere on the write path.** Every directory in
       the destination chain - including the root ``client_project_path`` -
@@ -27,8 +28,12 @@ Security model (after ChatGPT review, iterations 1-5):
             via ``os.open(name, O_RDONLY | O_DIRECTORY | O_NOFOLLOW,
             dir_fd=parent_fd)`` / ``os.mkdir(name, dir_fd=parent_fd)``.
           - The target file is created via
-            ``os.open(name, O_CREAT | O_EXCL | O_WRONLY | O_NOFOLLOW,
-            dir_fd=batch_fd)``.
+            ``os.open(name, O_CREAT | O_EXCL | O_RDWR | O_NOFOLLOW,
+            dir_fd=batch_fd)``. The descriptor is **O_RDWR, not O_WRONLY**,
+            because the post-copy integrity check reads back through the
+            same fd. A write-only fd would return ``EBADF`` on that read -
+            this was the exact failure mode found by the Kimi test run on
+            iteration 6.
 
     * **Atomic collision semantics.** ``O_EXCL`` guarantees exactly one
       writer succeeds for a given ``(batch_id, filename)`` pair; the loser
@@ -38,29 +43,25 @@ Security model (after ChatGPT review, iterations 1-5):
       module loops until the entire buffer has been written (see
       ``_write_all``).
 
+    * **Post-copy integrity check.** After writing, the module seeks the
+      target fd back to offset 0 and hashes it again through the same fd.
+      Using the same fd (rather than re-opening the path) preserves the
+      inode pin.
+
     * **Platform gate.** Descriptor-relative operations require ``dir_fd``,
       ``O_DIRECTORY``, and ``O_NOFOLLOW`` (POSIX). On platforms that lack
       them (notably Windows) there is no equivalent atomic mechanism in the
       Python standard library, so :func:`register_material` refuses to run
-      with an explicit ``OSError`` rather than silently falling back to an
-      unsafe check-then-use implementation.
+      with an explicit ``OSError``.
 
     * **Every filesystem call is inside ``try/except OSError``.** This
       includes ``os.open`` / ``os.mkdir`` / ``os.write`` / ``os.read`` /
       ``os.lseek`` / ``os.unlink`` / ``os.close`` / ``os.fchmod`` /
       ``os.utime``, ``Path.open`` / ``Path.stat`` / ``Path.exists`` /
-      ``Path.is_file`` / ``Path.is_dir``, and ``Path.resolve``. The only
-      ``Path.resolve`` call in the module lives inside
-      :func:`_default_config_path` (lazy, runtime-only) and is itself
-      wrapped in ``try/except OSError`` - no filesystem access happens at
-      module import time.
+      ``Path.is_file`` / ``Path.is_dir``, and ``Path.resolve``.
 
-    * **Threat-model boundary (N-001, iteration 3).** A concurrent rename of
-      the client project root *after* the root fd has been successfully
-      opened is NOT in scope of this module: the fd remains bound to the
-      inode that existed at open time, and the OS is responsible for the
-      rest. :class:`MaterialRecord.path` reflects the intended location at
-      the moment of the successful call.
+    * **Threat-model boundary.** A concurrent rename of the client project
+      root *after* the root fd has been successfully opened is NOT in scope.
 """
 from __future__ import annotations
 
@@ -77,16 +78,11 @@ from src.ingestion.validation import validate_path_component
 
 MATERIALS_SUBDIR = "05-client-materials"
 _CONFIG_ENV_VAR = "MATERIAL_UPLOAD_CONFIG"
-_CONFIG_RELATIVE_PATH = (
-    "config",
-    "material_upload.yaml",
-)
+_CONFIG_RELATIVE_PATH = ("config", "material_upload.yaml")
 
 _DEFAULT_BATCH_ID_STRATEGY = "uuid4"
 _DEFAULT_TIMESTAMP_FORMAT = "%Y%m%d-%H%M%S-%f"
 
-# Feature detection for descriptor-relative filesystem operations.
-# These are required to close the symlink-race (review C-001).
 _HAS_DIR_FD_SUPPORT = (
     hasattr(os, "O_DIRECTORY")
     and hasattr(os, "O_NOFOLLOW")
@@ -116,15 +112,9 @@ class MaterialRecord:
     ----------
     path : Path
         Intended location of the copied file inside the client project
-        (``05-client-materials/<batch_id>/<filename>``). See the module
-        docstring, section 'Threat-model boundary': a concurrent rename of
-        the project root after the successful call is out of scope, so
-        ``path`` is not guaranteed to keep pointing at the same inode under
-        adversarial concurrent modification of the project tree.
+        (``05-client-materials/<batch_id>/<filename>``).
     type : str
-        Material type tag exactly as supplied by the caller (e.g. ``'TXT'``
-        or ``'txt'``). Validation is case-insensitive; the stored value is
-        preserved as provided.
+        Material type tag exactly as supplied by the caller.
     batch_id : str
         Batch identifier shared by all files uploaded in the same action.
     uploaded_at : datetime
@@ -141,20 +131,11 @@ def generate_batch_id() -> str:
     """Generate a new batch identifier for one upload action.
 
     IMPORTANT: this function MUST be called EXACTLY ONCE per upload action
-    (i.e. per group of files uploaded together by the consultant), by the
-    caller - NOT inside :func:`register_material`. All files belonging to
-    the same upload action must share the same ``batch_id``; generating a
-    new one per file would break grouping in the manifest (TASK-004) and
-    defeat the purpose of the ``batch_id`` field.
+    by the caller - NOT inside :func:`register_material`.
 
     The strategy is read from ``config/material_upload.yaml`` (or from the
     file pointed to by the ``MATERIAL_UPLOAD_CONFIG`` environment variable).
     Supported strategies: ``'uuid4'`` (default) and ``'timestamp'``.
-
-    Returns
-    -------
-    str
-        New batch identifier.
 
     Raises
     ------
@@ -188,42 +169,11 @@ def register_material(
     unchanged into ``<client_project>/05-client-materials/<batch_id>/``,
     and return a :class:`MaterialRecord`.
 
-    The write path is fully descriptor-relative (see module docstring) and
-    is safe against symlink traversal and TOCTOU races. On platforms without
-    ``dir_fd`` / ``O_DIRECTORY`` / ``O_NOFOLLOW`` support this function
-    raises ``OSError`` rather than falling back to a non-atomic path.
-
-    Parameters
-    ----------
-    client_project_path : Path
-        Root of the client project (created by ``create_client_project``,
-        TASK-002). Must exist, be a directory, and not be a symlink (the
-        root is opened with ``O_NOFOLLOW``).
-    source_file : Path
-        Path to the source file to copy. Must exist and be a regular file.
-    material_type : str
-        Material type tag, e.g. ``'DOCX'``, ``'TXT'``, ``'AUDIO'``.
-        Must be listed under ``supported_material_types`` in the config
-        (validation is case-insensitive).
-    batch_id : str
-        Batch identifier shared by all files uploaded in a single action.
-        Must be generated ONCE per upload action by the caller using
-        :func:`generate_batch_id` - this function does NOT generate it
-        internally.
-
-    Returns
-    -------
-    MaterialRecord
-        Registration record for the copied file.
-
     Raises
     ------
     InvalidPathComponentError
         If ``batch_id`` or the source filename is unsafe as a path
-        component: contains ``/``, ``\\``, ``\x00``, or the directory-
-        traversal marker ``..`` (as a substring), is empty, whitespace-only,
-        or has leading/trailing whitespace. A single ``.`` inside the value
-        (e.g. ``sample.txt``) is allowed.
+        component.
     UnsupportedMaterialTypeError
         If ``material_type`` is not in the configured supported set.
     SourceFileNotFoundError
@@ -233,12 +183,10 @@ def register_material(
     NotADirectoryError
         If ``client_project_path`` exists but is not a directory.
     MaterialAlreadyExistsError
-        On a filename collision inside the target batch folder (enforced
-        atomically via ``O_CREAT | O_EXCL``).
+        On a filename collision inside the target batch folder.
     OSError
-        On any other filesystem error, on symlink traversal attempts
-        (including a symlinked ``client_project_path`` itself), or on
-        platforms without ``dir_fd`` support.
+        On any other filesystem error, on symlink traversal attempts,
+        or on platforms without ``dir_fd`` support.
     """
     if not _HAS_DIR_FD_SUPPORT:
         raise OSError(
@@ -246,24 +194,17 @@ def register_material(
             "operations (os.open / os.mkdir with dir_fd, O_DIRECTORY, "
             "O_NOFOLLOW) to guarantee symlink-safe storage. This platform "
             "does not support them; refusing to fall back to a non-atomic "
-            "path (see ChatGPT review C-001, iteration 2)."
+            "path."
         )
 
     config = _load_config()
 
-    # ------------------------------------------------------------------
-    # 1. Pure input validation - no filesystem access yet.
-    # ------------------------------------------------------------------
     validate_path_component(batch_id, "batch_id")
     source_path = Path(source_file)
     source_name = source_path.name
     validate_path_component(source_name, "source_file.name")
     _validate_material_type(material_type, config)
 
-    # ------------------------------------------------------------------
-    # 2. Verify the client project root exists and is a directory.
-    #    The definitive symlink check is O_NOFOLLOW at open time (step 5).
-    # ------------------------------------------------------------------
     project_path = Path(client_project_path)
     try:
         if not project_path.exists():
@@ -281,9 +222,6 @@ def register_material(
             f"Failed to inspect client_project_path {project_path}: {exc}"
         ) from exc
 
-    # ------------------------------------------------------------------
-    # 3. Verify the source file is a regular file.
-    # ------------------------------------------------------------------
     try:
         if not source_path.exists():
             raise SourceFileNotFoundError(
@@ -300,14 +238,8 @@ def register_material(
             f"Failed to inspect source_file {source_path}: {exc}"
         ) from exc
 
-    # ------------------------------------------------------------------
-    # 4. Hash the source BEFORE copying, so integrity can be checked after.
-    # ------------------------------------------------------------------
     source_hash = _file_sha256(source_path)
 
-    # ------------------------------------------------------------------
-    # 5. Descriptor-relative copy (symlink-safe, race-free).
-    # ------------------------------------------------------------------
     return _copy_material_fd_safe(
         project_path=project_path,
         source_path=source_path,
@@ -318,19 +250,8 @@ def register_material(
     )
 
 
-# ---------------------------------------------------------------------------
-# Internal helpers
-# ---------------------------------------------------------------------------
-
-
 def _default_config_path() -> Path:
-    """Resolve the default config path lazily at call time.
-
-    The resolution is deliberately NOT done at import time: (a) module
-    import should not depend on filesystem state; (b) ``Path.resolve`` is a
-    filesystem operation and must be wrapped in ``try/except OSError`` per
-    the TASK-003 contract (ChatGPT review C-002, iteration 4).
-    """
+    """Resolve the default config path lazily at call time."""
     try:
         module_path = Path(__file__).resolve()
     except OSError as exc:
@@ -383,31 +304,16 @@ def _open_or_create_dir_at(name: str, parent_fd: int, field_name: str) -> int:
     """Open ``name`` as a directory relative to ``parent_fd``, creating it
     if it does not exist.
 
-    Symlink-safe and race-safe by construction:
-        - ``O_DIRECTORY`` rejects entries that are not directories;
-        - ``O_NOFOLLOW`` rejects symlinks at this path component;
-        - the returned fd is bound to the inode that existed at open time,
-          so a later rename of the path (or replacement with a symlink)
-          cannot redirect subsequent dir_fd-relative operations.
-
-    Returns
-    -------
-    int
-        Open file descriptor for the directory. Caller is responsible for
-        closing it.
-
-    Raises
-    ------
-    OSError
-        If the component exists but is not a real directory, or if any
-        other filesystem error occurs while opening or creating it.
+    Symlink-safe and race-safe: ``O_DIRECTORY`` rejects non-directories,
+    ``O_NOFOLLOW`` rejects symlinks, and the returned fd is bound to the
+    inode that existed at open time.
     """
     flags = os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW
 
     try:
         return os.open(name, flags, dir_fd=parent_fd)
     except FileNotFoundError:
-        pass  # fall through to create it below
+        pass
     except OSError as exc:
         raise OSError(
             f"Failed to open {field_name} ({name!r}): {exc}"
@@ -416,7 +322,6 @@ def _open_or_create_dir_at(name: str, parent_fd: int, field_name: str) -> int:
     try:
         os.mkdir(name, dir_fd=parent_fd)
     except FileExistsError:
-        # Raced with another creator; the open below re-validates.
         pass
     except OSError as exc:
         raise OSError(
@@ -442,10 +347,9 @@ def _copy_material_fd_safe(
 ) -> MaterialRecord:
     """Descriptor-relative, symlink-safe, atomic copy.
 
-    See module docstring for the security rationale. The root
-    ``project_path`` is opened with ``O_NOFOLLOW`` so that a symlinked
-    client project root is rejected at the very first step, before any
-    dir_fd-relative traversal begins.
+    The target fd is opened **O_RDWR** (not O_WRONLY) because the
+    post-copy hash check reads the same fd. O_WRONLY would return EBADF
+    on that read - this was the exact bug found by the Kimi test run.
     """
     try:
         project_fd = os.open(
@@ -473,14 +377,10 @@ def _copy_material_fd_safe(
             f"batch directory for batch_id={batch_id!r}",
         )
 
-        # Atomic create with O_EXCL + O_NOFOLLOW, relative to batch_fd.
-        # - O_EXCL: exactly one winner under contention (TOCTOU closed).
-        # - O_NOFOLLOW: a pre-existing symlink with this name is rejected
-        #   without ever being followed.
         try:
             target_fd = os.open(
                 source_name,
-                os.O_CREAT | os.O_EXCL | os.O_WRONLY | os.O_NOFOLLOW,
+                os.O_CREAT | os.O_EXCL | os.O_RDWR | os.O_NOFOLLOW,
                 0o644,
                 dir_fd=batch_fd,
             )
@@ -493,8 +393,6 @@ def _copy_material_fd_safe(
                 f"Failed to create target file {target_path}: {exc}"
             ) from exc
 
-        # Copy bytes straight into the open fd, then set metadata via fchmod
-        # and utime on the fd - never by re-opening the path.
         try:
             _copy_bytes_into_fd(source_path, target_fd)
         except OSError as exc:
@@ -505,7 +403,6 @@ def _copy_material_fd_safe(
                 f"Failed to copy {source_path} -> {target_path}: {exc}"
             ) from exc
 
-        # Post-copy integrity check, read back through the same fd.
         try:
             os.lseek(target_fd, 0, os.SEEK_SET)
             target_hash = _fd_sha256(target_fd)
@@ -544,11 +441,7 @@ def _copy_material_fd_safe(
 
 def _copy_bytes_into_fd(source_path: Path, target_fd: int) -> None:
     """Write ``source_path`` contents into the already-open ``target_fd``,
-    then copy mode and timestamps via fd-relative calls.
-
-    Uses :func:`_write_all` so that a short write from ``os.write`` cannot
-    silently truncate the destination.
-    """
+    then copy mode and timestamps via fd-relative calls."""
     try:
         with source_path.open("rb") as src_fh:
             while True:
@@ -567,11 +460,7 @@ def _copy_bytes_into_fd(source_path: Path, target_fd: int) -> None:
 
 
 def _write_all(fd: int, data: bytes) -> None:
-    """Write the entire *data* buffer to *fd*, looping on short writes.
-
-    ``os.write`` is permitted to write fewer bytes than requested. A return
-    value of 0 is treated as an error to avoid an infinite loop.
-    """
+    """Write the entire *data* buffer to *fd*, looping on short writes."""
     view = memoryview(data)
     while view:
         written = os.write(fd, view)
@@ -583,8 +472,7 @@ def _write_all(fd: int, data: bytes) -> None:
 
 
 def _file_sha256(path: Path) -> str:
-    """Compute the SHA-256 hex digest of a file by path (used for the
-    source, which is outside the protected tree)."""
+    """Compute the SHA-256 hex digest of a file by path."""
     digest = hashlib.sha256()
     try:
         with path.open("rb") as fh:
@@ -599,8 +487,8 @@ def _fd_sha256(fd: int) -> str:
     """Compute the SHA-256 hex digest of the file referenced by ``fd``,
     starting from the current position.
 
-    ``os.read`` is wrapped in ``try/except OSError`` with local context
-    (ChatGPT review C-001, iteration 4).
+    NOTE: this function requires the fd to be readable. The target fd is
+    opened O_RDWR (see _copy_material_fd_safe) precisely so this works.
     """
     digest = hashlib.sha256()
     try:
